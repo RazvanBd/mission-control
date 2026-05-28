@@ -48,8 +48,16 @@ export interface GuardOptions {
   criticalOnly?: boolean
   /** Maximum input length to scan (default: 50_000 chars) */
   maxLength?: number
-  /** Scan context: 'prompt' applies all rules; 'display' skips command injection; 'shell' focuses on command rules */
-  context?: 'prompt' | 'display' | 'shell'
+  /**
+   * Scan context:
+   * - 'prompt'    applies all rules (default)
+   * - 'display'   skips command injection rules
+   * - 'shell'     focuses on command rules
+   * - 'installer' scans a downloaded installer script: checks for reverse shells, SSRF, and
+   *               exfiltration but skips `cmd-pipe-download` and `cmd-shell-metachar` because
+   *               patterns like `curl … | bash` are normal in legitimate installer scripts.
+   */
+  context?: 'prompt' | 'display' | 'shell' | 'installer'
   /**
    * Decode and scan additional encoded variants (rot13, url, base64).
    * Default: true. Set to false on hot paths where the decode pass adds
@@ -227,7 +235,7 @@ interface InjectionRule {
   pattern: RegExp
   description: string
   /** Which contexts this rule applies to */
-  contexts: Array<'prompt' | 'display' | 'shell'>
+  contexts: Array<'prompt' | 'display' | 'shell' | 'installer'>
 }
 
 const RULES: InjectionRule[] = [
@@ -296,7 +304,7 @@ const RULES: InjectionRule[] = [
     severity: 'critical',
     pattern: /(?:\.\.\/){2,}|\.\.\\(?:\.\.\\){1,}/,
     description: 'Path traversal sequences',
-    contexts: ['prompt', 'shell', 'display'],
+    contexts: ['prompt', 'shell', 'display', 'installer'],
   },
   {
     rule: 'cmd-pipe-download',
@@ -304,6 +312,7 @@ const RULES: InjectionRule[] = [
     severity: 'critical',
     pattern: /\b(?:curl|wget)\s+[^\n]*\|\s*(?:bash|sh|zsh|python|perl|ruby|node)\b/i,
     description: 'Download-and-run pattern (piped curl/wget to interpreter)',
+    // Excluded from 'installer' context: piped downloads are standard patterns in legitimate installers.
     contexts: ['prompt', 'shell'],
   },
   {
@@ -312,7 +321,7 @@ const RULES: InjectionRule[] = [
     severity: 'critical',
     pattern: /\b(?:\/dev\/tcp\/|mkfifo|nc\s+-[elp]|ncat\s.*-[elp]|bash\s+-i\s+>&?\s*\/dev\/|python.*socket.*connect)\b/i,
     description: 'Reverse shell patterns',
-    contexts: ['prompt', 'shell'],
+    contexts: ['prompt', 'shell', 'installer'],
   },
   {
     rule: 'cmd-env-access',
@@ -320,7 +329,7 @@ const RULES: InjectionRule[] = [
     severity: 'warning',
     pattern: /\b(?:printenv|env\b.*(?:AUTH_PASS|API_KEY|SECRET|TOKEN)|cat\s+(?:\/proc\/self\/environ|\.env\b|\/etc\/(?:shadow|passwd)))/i,
     description: 'Attempts to access environment variables or sensitive system files',
-    contexts: ['prompt', 'shell'],
+    contexts: ['prompt', 'shell', 'installer'],
   },
 
   // ── SSRF ─────────────────────────────────────────────────────
@@ -330,7 +339,7 @@ const RULES: InjectionRule[] = [
     severity: 'critical',
     pattern: /\b(?:curl|wget|fetch|http\.get|requests\.get|axios)\b[^\n]*(?:169\.254\.169\.254|metadata\.google|100\.100\.100\.200|localhost:\d|127\.0\.0\.1:\d|0\.0\.0\.0:\d|\[::1\]:\d)/i,
     description: 'SSRF targeting internal/metadata endpoints',
-    contexts: ['prompt', 'shell'],
+    contexts: ['prompt', 'shell', 'installer'],
   },
 
   // ── Template injection ──────────────────────────────────────
@@ -360,7 +369,7 @@ const RULES: InjectionRule[] = [
     severity: 'critical',
     pattern: /\b(?:send|post|upload|transmit|exfiltrate|forward)\s+(?:all\s+)?(?:the\s+)?(?:data|files?|contents?|secrets?|keys?|tokens?|credentials?|passwords?|env(?:ironment)?)\s+(?:to|via|using|through)\b/i,
     description: 'Instructions to exfiltrate data',
-    contexts: ['prompt', 'display'],
+    contexts: ['prompt', 'display', 'installer'],
   },
   {
     rule: 'exfil-webhook',
@@ -368,7 +377,7 @@ const RULES: InjectionRule[] = [
     severity: 'warning',
     pattern: /\b(?:webhook|callback|postback)\s*[:=]\s*https?:\/\/(?!(?:localhost|127\.0\.0\.1))/i,
     description: 'External webhook URL that could be used for data exfiltration',
-    contexts: ['prompt', 'shell'],
+    contexts: ['prompt', 'shell', 'installer'],
   },
 
   // ── Encoding / obfuscation ──────────────────────────────────
@@ -378,7 +387,7 @@ const RULES: InjectionRule[] = [
     severity: 'warning',
     pattern: /(?:base64\s+-d|atob\s*\(|Buffer\.from\s*\([^)]+,\s*['"]base64['"])/i,
     description: 'Base64 decode that may hide malicious content',
-    contexts: ['prompt', 'shell'],
+    contexts: ['prompt', 'shell', 'installer'],
   },
   {
     rule: 'enc-heavy-hex',
