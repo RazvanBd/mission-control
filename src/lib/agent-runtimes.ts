@@ -34,7 +34,7 @@ async function downloadAndReviewScript(
   const tempDir = mkdtempSync(join(tmpdir(), 'mc-install-'))
   const scriptPath = join(tempDir, 'install.sh')
 
-  const hasCurl = await runCommand('which', ['curl'], { timeoutMs: 5_000 })
+  const hasCurl = await runCommand(process.platform === 'win32' ? 'where' : 'which', ['curl'], { timeoutMs: 5_000 })
     .then(r => r.code === 0).catch(() => false)
   const dlCmd = hasCurl
     ? ['curl', ['-fsSL', '-o', scriptPath, url]] as const
@@ -54,7 +54,10 @@ async function downloadAndReviewScript(
     return null
   }
 
-  // 2. Read and scan with injection guard (regex baseline)
+  // 2. Read and scan with injection guard using 'installer' context.
+  //    'installer' context checks for reverse shells, SSRF, and exfiltration
+  //    but skips cmd-pipe-download and cmd-shell-metachar — patterns like
+  //    `curl … | bash` are expected inside legitimate installer scripts.
   let content: string
   try {
     content = readFileSync(scriptPath, 'utf-8')
@@ -70,7 +73,7 @@ async function downloadAndReviewScript(
     return null
   }
 
-  const regexReport = scanForInjection(content, { context: 'shell' })
+  const regexReport = scanForInjection(content, { context: 'installer' })
   if (!regexReport.safe) {
     const criticals = regexReport.matches.filter(m => m.severity === 'critical')
     if (criticals.length > 0) {
