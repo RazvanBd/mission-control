@@ -312,7 +312,7 @@ const RULES: InjectionRule[] = [
     severity: 'critical',
     pattern: /\b(?:curl|wget)\s+[^\n]*\|\s*(?:bash|sh|zsh|python|perl|ruby|node)\b/i,
     description: 'Download-and-run pattern (piped curl/wget to interpreter)',
-    // Not included in 'installer': curl … | bash is expected inside legitimate installer scripts.
+    // Excluded from 'installer' context: piped downloads are standard patterns in legitimate installers.
     contexts: ['prompt', 'shell'],
   },
   {
