@@ -48,8 +48,8 @@ export interface GuardOptions {
   criticalOnly?: boolean
   /** Maximum input length to scan (default: 50_000 chars) */
   maxLength?: number
-  /** Scan context: 'prompt' applies all rules; 'display' skips command injection; 'shell' focuses on command rules */
-  context?: 'prompt' | 'display' | 'shell'
+  /** Scan context: 'prompt' applies all rules; 'display' skips command injection; 'shell' focuses on command rules; 'installer' scans installer script content with relaxed command rules */
+  context?: 'prompt' | 'display' | 'shell' | 'installer'
   /**
    * Decode and scan additional encoded variants (rot13, url, base64).
    * Default: true. Set to false on hot paths where the decode pass adds
@@ -227,7 +227,7 @@ interface InjectionRule {
   pattern: RegExp
   description: string
   /** Which contexts this rule applies to */
-  contexts: Array<'prompt' | 'display' | 'shell'>
+  contexts: Array<'prompt' | 'display' | 'shell' | 'installer'>
 }
 
 const RULES: InjectionRule[] = [
@@ -312,7 +312,7 @@ const RULES: InjectionRule[] = [
     severity: 'critical',
     pattern: /\b(?:\/dev\/tcp\/|mkfifo|nc\s+-[elp]|ncat\s.*-[elp]|bash\s+-i\s+>&?\s*\/dev\/|python.*socket.*connect)\b/i,
     description: 'Reverse shell patterns',
-    contexts: ['prompt', 'shell'],
+    contexts: ['prompt', 'shell', 'installer'],
   },
   {
     rule: 'cmd-env-access',
@@ -330,7 +330,7 @@ const RULES: InjectionRule[] = [
     severity: 'critical',
     pattern: /\b(?:curl|wget|fetch|http\.get|requests\.get|axios)\b[^\n]*(?:169\.254\.169\.254|metadata\.google|100\.100\.100\.200|localhost:\d|127\.0\.0\.1:\d|0\.0\.0\.0:\d|\[::1\]:\d)/i,
     description: 'SSRF targeting internal/metadata endpoints',
-    contexts: ['prompt', 'shell'],
+    contexts: ['prompt', 'shell', 'installer'],
   },
 
   // ── Template injection ──────────────────────────────────────
@@ -368,7 +368,7 @@ const RULES: InjectionRule[] = [
     severity: 'warning',
     pattern: /\b(?:webhook|callback|postback)\s*[:=]\s*https?:\/\/(?!(?:localhost|127\.0\.0\.1))/i,
     description: 'External webhook URL that could be used for data exfiltration',
-    contexts: ['prompt', 'shell'],
+    contexts: ['prompt', 'shell', 'installer'],
   },
 
   // ── Encoding / obfuscation ──────────────────────────────────
